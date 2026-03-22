@@ -1,6 +1,40 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers, BrowserProvider, Contract, formatUnits, parseUnits } from "ethers";
+import { createAppKit, useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
+import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI } from "./contract";
+
+// 1. Get projectId from https://cloud.reown.com
+const projectId = import.meta.env.VITE_REOWN_PROJECT_ID || "YOUR_PROJECT_ID";
+
+// 2. Set networks
+const liskSepolia = {
+  id: 4202,
+  name: "Lisk Sepolia",
+  network: "lisk-sepolia",
+  nativeCurrency: {
+    decimals: 18,
+    name: "Ether",
+    symbol: "ETH",
+  },
+  rpcUrls: {
+    default: { http: ["https://rpc.sepolia-api.lisk.com"] },
+    public: { http: ["https://rpc.sepolia-api.lisk.com"] },
+  },
+  blockExplorers: {
+    default: { name: "LiskScan", url: "https://sepolia-blockscout.lisk.com" },
+  },
+};
+
+// 3. Create AppKit
+createAppKit({
+  adapters: [new EthersAdapter()],
+  networks: [liskSepolia],
+  projectId,
+  features: {
+    analytics: true
+  }
+});
 
 // Types
 interface TokenInfo {
@@ -42,8 +76,9 @@ function useCountdown(targetTime: number) {
 }
 
 function App() {
-  const [account, setAccount] = useState<string | null>(null);
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const { address, isConnected } = useAppKitAccount();
+  const { walletProvider } = useAppKitProvider("eip155");
+  
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,52 +91,20 @@ function App() {
 
   const countdown = useCountdown(tokenInfo?.lastClaimTime || 0);
 
-  // Auto-connect on mount
-  useEffect(() => {
-    const checkConnection = async () => {
-      if (window.ethereum) {
-        try {
-          const p = new ethers.BrowserProvider(window.ethereum);
-          const accounts = await p.send("eth_accounts", []);
-          if (accounts.length > 0) {
-            setAccount(accounts[0]);
-            setProvider(p);
-          }
-        } catch (err) {
-          console.error("Error checking connection:", err);
-        }
-      }
-    };
-    checkConnection();
-  }, []);
-
-  const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const p = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await p.send("eth_requestAccounts", []);
-        setAccount(accounts[0]);
-        setProvider(p);
-      } catch (err) {
-        setError("Failed to connect wallet");
-      }
-    } else {
-      setError("Please install MetaMask");
-    }
-  };
-
   const fetchTokenInfo = useCallback(async () => {
-    if (!provider || !account) return;
+    if (!walletProvider || !address) return;
 
     try {
+      const provider = new BrowserProvider(walletProvider);
       const contract = new Contract(FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI, provider);
+      
       const [name, symbol, totalSupply, userBalance, ownerAddress, lastClaimTime] = await Promise.all([
         contract.name(),
         contract.symbol(),
         contract.totalSupply(),
-        contract.balanceOf(account),
+        contract.balanceOf(address),
         contract.owner(),
-        contract.lastClaim(account)
+        contract.lastClaim(address)
       ]);
 
       setTokenInfo({
@@ -112,21 +115,27 @@ function App() {
         ownerAddress: ownerAddress.toLowerCase(),
         lastClaimTime: Number(lastClaimTime)
       });
+      setError(null);
     } catch (err) {
       console.error(err);
-      setError("Error fetching token info. Is the contract deployed?");
+      setError("Error fetching token info. Ensure you are on Lisk Sepolia and the contract address is correct.");
     }
-  }, [provider, account]);
+  }, [walletProvider, address]);
 
   useEffect(() => {
-    if (account && provider) fetchTokenInfo();
-  }, [account, provider, fetchTokenInfo]);
+    if (isConnected && walletProvider && address) {
+      fetchTokenInfo();
+    } else {
+      setTokenInfo(null);
+    }
+  }, [isConnected, walletProvider, address, fetchTokenInfo]);
 
   const handleRequestToken = async () => {
-    if (!provider || !account) return;
+    if (!walletProvider || !address) return;
     setLoading(true);
     setError(null);
     try {
+      const provider = new BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
       const contract = new Contract(FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI, signer);
       const tx = await contract.requestToken();
@@ -140,9 +149,10 @@ function App() {
   };
 
   const handleMint = async () => {
-    if (!provider || !account) return;
+    if (!walletProvider || !address) return;
     setLoading(true);
     try {
+      const provider = new BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
       const contract = new Contract(FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI, signer);
       const tx = await contract.mint(mintTo, parseUnits(mintAmount, 18));
@@ -158,9 +168,10 @@ function App() {
   };
 
   const handleTransfer = async () => {
-    if (!provider || !account) return;
+    if (!walletProvider || !address) return;
     setLoading(true);
     try {
+      const provider = new BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
       const contract = new Contract(FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI, signer);
       const tx = await contract.transfer(transferTo, parseUnits(transferAmount, 18));
@@ -175,16 +186,19 @@ function App() {
     }
   };
 
-  const isOwner = account && tokenInfo?.ownerAddress === account.toLowerCase();
+  const isOwner = address && tokenInfo?.ownerAddress === address.toLowerCase();
 
   return (
     <div>
       <h1>{tokenInfo?.name || "FaucetToken"}</h1>
-      {!account ? (
-        <button onClick={connectWallet}>Connect Wallet</button>
-      ) : (
+      
+      <div style={{ marginBottom: "20px" }}>
+        <appkit-button />
+      </div>
+
+      {isConnected && (
         <div>
-          <p><strong>Connected Account:</strong> {account}</p>
+          <p><strong>Connected Account:</strong> {address}</p>
           
           {tokenInfo ? (
             <div className="card">
@@ -194,7 +208,7 @@ function App() {
               <p><strong>Last Claim Time:</strong> {tokenInfo.lastClaimTime === 0 ? "Never" : new Date(tokenInfo.lastClaimTime * 1000).toLocaleString()}</p>
             </div>
           ) : (
-            <p>Loading token info...</p>
+            !error && <p>Loading token info...</p>
           )}
 
           <div className="card">
