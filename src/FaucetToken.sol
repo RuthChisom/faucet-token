@@ -20,10 +20,9 @@ contract FaucetToken {
     mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
 
-    // Faucet Mappings
-    mapping(address => uint256) public lastClaimed;
+    // Faucet State
+    mapping(address => uint256) public lastClaim;
     uint256 public constant FAUCET_AMOUNT = 100 * 10**uint256(decimals);
-    uint256 public constant WAIT_TIME = 24 hours;
 
     // Events
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -116,10 +115,13 @@ contract FaucetToken {
      * @dev Faucet function: Claim 100 tokens every 24 hours.
      */
     function requestToken() public {
-        require(lastClaimed[msg.sender] == 0 || block.timestamp >= lastClaimed[msg.sender] + WAIT_TIME, "Must wait 24 hours between claims");
+        require(
+            block.timestamp >= lastClaim[msg.sender] + 1 days,
+            "Wait 24 hours"
+        );
         require(totalSupply + FAUCET_AMOUNT <= MAX_SUPPLY, "Faucet empty: MAX_SUPPLY reached");
 
-        lastClaimed[msg.sender] = block.timestamp;
+        lastClaim[msg.sender] = block.timestamp;
         totalSupply += FAUCET_AMOUNT;
         _balances[msg.sender] += FAUCET_AMOUNT;
 

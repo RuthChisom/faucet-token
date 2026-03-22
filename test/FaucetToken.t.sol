@@ -13,6 +13,8 @@ contract FaucetTokenTest is Test {
     function setUp() public {
         vm.prank(owner);
         token = new FaucetToken();
+        // Warp to 1 day to allow the first claim to pass
+        vm.warp(1 days);
     }
 
     function test_InitialState() public {
@@ -50,14 +52,14 @@ contract FaucetTokenTest is Test {
         vm.prank(user1);
         token.requestToken();
         assertEq(token.balanceOf(user1), 100 * 10**18);
-        assertEq(token.lastClaimed(user1), block.timestamp);
+        assertEq(token.lastClaim(user1), block.timestamp);
     }
 
     function test_RequestTokenCooldown() public {
         vm.startPrank(user1);
         token.requestToken();
         
-        vm.expectRevert("Must wait 24 hours between claims");
+        vm.expectRevert("Wait 24 hours");
         token.requestToken();
         
         // Advance time by 24 hours
