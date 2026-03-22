@@ -7,9 +7,9 @@ export const FAUCET_TOKEN_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function lastClaim(address) view returns (uint256)",
   "function owner() view returns (address)",
-  "function requestToken() nonpayable",
-  "function mint(address,uint256) nonpayable",
-  "function transfer(address,uint256) nonpayable returns (bool)",
+  "function requestToken()",
+  "function mint(address to, uint256 amount)",
+  "function transfer(address to, uint256 amount) returns (bool)",
   "event FaucetClaimed(address indexed account, uint256 amount)",
   "event Transfer(address indexed from, address indexed to, uint256 value)"
 ];

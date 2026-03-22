@@ -39,6 +39,7 @@ createAppKit({
 // Types
 interface TokenInfo {
   name: string;
+  description: string;
   symbol: string;
   totalSupply: string;
   userBalance: string;
@@ -95,11 +96,18 @@ function App() {
     if (!walletProvider || !address) return;
 
     try {
-      const provider = new BrowserProvider(walletProvider);
+      const provider = new BrowserProvider(walletProvider as any);
+      const network = await provider.getNetwork();
+      if (network.chainId !== BigInt(liskSepolia.id)) {
+        setError(`Wrong network! Please switch to Lisk Sepolia (Chain ID ${liskSepolia.id})`);
+        return;
+      }
+
       const contract = new Contract(FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI, provider);
       
-      const [name, symbol, totalSupply, userBalance, ownerAddress, lastClaimTime] = await Promise.all([
+      const [name, description, symbol, totalSupply, userBalance, ownerAddress, lastClaimTime] = await Promise.all([
         contract.name(),
+        contract.description(),
         contract.symbol(),
         contract.totalSupply(),
         contract.balanceOf(address),
@@ -109,6 +117,7 @@ function App() {
 
       setTokenInfo({
         name,
+        description,
         symbol,
         totalSupply: formatUnits(totalSupply, 18),
         userBalance: formatUnits(userBalance, 18),
@@ -116,9 +125,9 @@ function App() {
         lastClaimTime: Number(lastClaimTime)
       });
       setError(null);
-    } catch (err) {
-      console.error(err);
-      setError("Error fetching token info. Ensure you are on Lisk Sepolia and the contract address is correct.");
+    } catch (err: any) {
+      console.error("Fetch Error:", err);
+      setError(`Error fetching token info: ${err.message || err.reason || "Unknown error"}`);
     }
   }, [walletProvider, address]);
 
@@ -135,14 +144,19 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const provider = new BrowserProvider(walletProvider);
+      const provider = new BrowserProvider(walletProvider as any);
       const signer = await provider.getSigner();
       const contract = new Contract(FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI, signer);
+      
+      console.log("Requesting token...");
       const tx = await contract.requestToken();
+      console.log("Transaction sent:", tx.hash);
       await tx.wait();
+      console.log("Transaction confirmed");
       await fetchTokenInfo();
     } catch (err: any) {
-      setError(err.reason || "Faucet request failed");
+      console.error("RequestToken Error:", err);
+      setError(err.reason || err.message || "Faucet request failed");
     } finally {
       setLoading(false);
     }
@@ -150,18 +164,24 @@ function App() {
 
   const handleMint = async () => {
     if (!walletProvider || !address) return;
+    if (!mintTo || !mintAmount) return;
     setLoading(true);
+    setError(null);
     try {
-      const provider = new BrowserProvider(walletProvider);
+      const provider = new BrowserProvider(walletProvider as any);
       const signer = await provider.getSigner();
       const contract = new Contract(FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI, signer);
-      const tx = await contract.mint(mintTo, parseUnits(mintAmount, 18));
+      
+      console.log(`Minting ${mintAmount} to ${mintTo}`);
+      const tx = await contract.mint(mintTo, parseUnits(mintAmount.toString(), 18));
+      console.log("Transaction sent:", tx.hash);
       await tx.wait();
       await fetchTokenInfo();
       setMintTo("");
       setMintAmount("");
     } catch (err: any) {
-      setError(err.reason || "Minting failed");
+      console.error("Mint Error:", err);
+      setError(err.reason || err.message || "Minting failed");
     } finally {
       setLoading(false);
     }
@@ -169,18 +189,24 @@ function App() {
 
   const handleTransfer = async () => {
     if (!walletProvider || !address) return;
+    if (!transferTo || !transferAmount) return;
     setLoading(true);
+    setError(null);
     try {
-      const provider = new BrowserProvider(walletProvider);
+      const provider = new BrowserProvider(walletProvider as any);
       const signer = await provider.getSigner();
       const contract = new Contract(FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI, signer);
-      const tx = await contract.transfer(transferTo, parseUnits(transferAmount, 18));
+      
+      console.log(`Transferring ${transferAmount} to ${transferTo}`);
+      const tx = await contract.transfer(transferTo, parseUnits(transferAmount.toString(), 18));
+      console.log("Transaction sent:", tx.hash);
       await tx.wait();
       await fetchTokenInfo();
       setTransferTo("");
       setTransferAmount("");
     } catch (err: any) {
-      setError(err.reason || "Transfer failed");
+      console.error("Transfer Error:", err);
+      setError(err.reason || err.message || "Transfer failed");
     } finally {
       setLoading(false);
     }
@@ -191,6 +217,7 @@ function App() {
   return (
     <div>
       <h1>{tokenInfo?.name || "FaucetToken"}</h1>
+      <h5>{tokenInfo?.description || "Request FCT Tokens Hassle Free"}</h5>
       
       <div style={{ marginBottom: "20px" }}>
         <appkit-button />
