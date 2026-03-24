@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ethers, BrowserProvider, Contract, formatUnits, parseUnits } from "ethers";
+import { BrowserProvider, Contract, formatUnits, parseUnits } from "ethers";
 import { createAppKit, useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { FAUCET_TOKEN_ADDRESS, FAUCET_TOKEN_ABI } from "./contract";
